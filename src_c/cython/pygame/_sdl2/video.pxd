@@ -7,12 +7,20 @@ cdef extern from "SDL.h" nogil:
     ctypedef struct SDL_Window
     ctypedef struct SDL_Texture
     ctypedef struct SDL_Renderer
+    
     ctypedef struct SDL_Rect:
         int x, y
         int w, h
+    ctypedef struct SDL_FRect:
+        float x, y
+        float w, h
 
     ctypedef enum SDL_PixelFormatEnum:
         SDL_PIXELFORMAT_UNKNOWN
+
+
+    #https://wiki.libsdl.org/SDL_GetPixelFormatName
+    const char* SDL_GetPixelFormatName(Uint32 format)
 
     int SDL_BITSPERPIXEL(Uint32 format)
 
@@ -29,13 +37,24 @@ cdef extern from "SDL.h" nogil:
         int locked
         void *lock_data
         SDL_Rect clip_rect
-
+        
     ctypedef struct SDL_Point:
         int x, y
+    ctypedef struct SDL_FPoint:
+        float x, y
+    
     ctypedef enum SDL_RendererFlip:
         SDL_FLIP_NONE,
         SDL_FLIP_HORIZONTAL,
         SDL_FLIP_VERTICAL
+
+    ctypedef enum SDL_bool:
+        SDL_FALSE,
+        SDL_TRUE
+
+    SDL_bool SDL_SetHint(const char* name,
+                        const char* value)
+        
 
     # https://wiki.libsdl.org/SDL_MessageBoxData
     # https://wiki.libsdl.org/SDL_ShowMessageBox
@@ -74,6 +93,8 @@ cdef extern from "SDL.h" nogil:
     # https://wiki.libsdl.org/SDL_RenderClear
     # https://wiki.libsdl.org/SDL_RenderCopy
     # https://wiki.libsdl.org/SDL_RenderCopyEx
+    # https://wiki.libsdl.org/SDL_RenderCopyF
+    # https://wiki.libsdl.org/SDL_RenderCopyExF
     # https://wiki.libsdl.org/SDL_RenderPresent
     int SDL_SetRenderDrawColor(SDL_Renderer* renderer,
                                Uint8         r,
@@ -96,6 +117,19 @@ cdef extern from "SDL.h" nogil:
                          const double           angle,
                          const SDL_Point*       center,
                          const SDL_RendererFlip flip)
+
+    int SDL_RenderCopyF(SDL_Renderer*   renderer,
+                       SDL_Texture*    texture,
+                       const SDL_Rect* srcrect,
+                       const SDL_FRect* dstrect)
+    int SDL_RenderCopyExF(SDL_Renderer*          renderer,
+                         SDL_Texture*           texture,
+                         const SDL_Rect*        srcrect,
+                         const SDL_FRect*        dstrect,
+                         const double           angle,
+                         const SDL_FPoint*       center,
+                         const SDL_RendererFlip flip)
+
     void SDL_RenderPresent(SDL_Renderer* renderer)
     # https://wiki.libsdl.org/SDL_RenderGetViewport
     # https://wiki.libsdl.org/SDL_RenderSetViewport
@@ -249,7 +283,7 @@ cdef extern from "SDL.h" nogil:
     # https://wiki.libsdl.org/SDL_DestroyTexture
     # https://wiki.libsdl.org/SDL_GetTextureAlphaMod
     # https://wiki.libsdl.org/SDL_SetTextureAlphaMod
-    # https://wiki.libsdl.org/SDL_GetTextureBlendMode
+    # https://wiki.libsdl.org/SDL_GetTextureBlendModemode
     # https://wiki.libsdl.org/SDL_SetTextureBlendMode
     # https://wiki.libsdl.org/SDL_GetTextureColorMod
     # https://wiki.libsdl.org/SDL_SetTextureColorMod
@@ -385,6 +419,9 @@ cdef class Renderer:
     cpdef object get_viewport(self)
     cpdef object blit(self, object source, Rect dest=*, Rect area=*, int special_flags=*)
 
+    cpdef clear(self)
+    cpdef present(self)
+
 cdef class Texture:
     cdef SDL_Texture* _tex
     cdef Color _color
@@ -396,6 +433,10 @@ cdef class Texture:
                        bint flipX=*, bint flipY=*)
     cpdef void draw(self, srcrect=*, dstrect=*, float angle=*, origin=*,
                     bint flipX=*, bint flipY=*)
+
+
+
+cpdef void draw_images(list images_and_src_and_dest) except *
 
 cdef class Image:
     cdef public float angle
@@ -409,3 +450,4 @@ cdef class Image:
     cdef public Rect srcrect
 
     cpdef void draw(self, srcrect=*, dstrect=*)
+    cpdef Image copy(self)

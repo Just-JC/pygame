@@ -1,4 +1,5 @@
 from cpython cimport PyObject
+from cython.operator cimport dereference as deref
 from . import error
 from . import error as errorfnc
 from libc.stdlib cimport free, malloc
@@ -278,9 +279,20 @@ cdef class Window:
             raise error()
         SDL_SetWindowData(self._win, "pg_window", <PyObject*>self)
 
+        cdef str final_path, new_path
+
+        #from os import sep
+        #from os.path import dirname
         import pygame.pkgdata
+
+        #new_path = dirname(__file__)
+        
+        #new_path = new_path[:new_path.rindex(sep)]+sep
+
         surf = pygame.image.load(pygame.pkgdata.getResource(
                                  'pygame_icon.bmp'))
+        #final_path = new_path+'pygame_icon.bmp'
+        #surf = pygame.image.load(final_path)
         surf.set_colorkey(0)
         self.set_icon(surf)
 
@@ -708,8 +720,25 @@ cdef class Texture:
 
         return rect
 
+    def query(self):
+        cdef Uint32 form
+        cdef int acc 
+        cdef int w
+        cdef int h
+        cdef int res
+
+        res = SDL_QueryTexture(self._tex, &form, &acc, &w, &h)
+
+        print res
+
+        if res < 0:
+            raise error()
+
+        return (SDL_GetPixelFormatName(form), acc, w, h)
+
     cdef draw_internal(self, SDL_Rect *csrcrect, SDL_Rect *cdstrect, float angle=0, SDL_Point *originptr=NULL,
                        bint flipX=False, bint flipY=False):
+        
         cdef int flip = SDL_FLIP_NONE
         if flipX:
             flip |= SDL_FLIP_HORIZONTAL
@@ -781,7 +810,6 @@ cdef class Texture:
 
         :param surface: source Surface.
         """
-
         if not pgSurface_Check(surface):
             raise TypeError("update source should be a Surface.")
 
@@ -795,6 +823,31 @@ cdef class Texture:
         res = SDL_UpdateTexture(self._tex, rectptr, surf.pixels, surf.pitch)
         if res < 0:
             raise error()
+
+
+
+cdef tuple Rect_or_None = (Rect, type(None))
+
+cpdef void draw_images(list images_and_src_and_dest) except *:
+    cdef tuple img_tup
+    cdef Image img
+    cdef object src, dest
+    cdef Py_ssize_t i
+    cdef int l = len(images_and_src_and_dest)
+
+    for i in range(l):
+        img_tup = images_and_src_and_dest[i]
+        img = img_tup[0]
+        src = img_tup[1]
+        dest = img_tup[2]
+
+        img.draw(src, dest)
+
+
+
+
+
+
 
 cdef class Image:
 
@@ -831,18 +884,42 @@ cdef class Image:
 
             if temp.x < 0 or temp.y < 0 or \
                 temp.w < 0 or temp.h < 0 or \
-                temp.x + temp.w > self.srcrect.w or \
-                temp.y + temp.h > self.srcrect.h:
+                temp.x + temp.w > self.srcrect.r.w or \
+                temp.y + temp.h > self.srcrect.r.h:
                 raise ValueError('rect values are out of range')
-            temp.x += self.srcrect.x
-            temp.y += self.srcrect.y
+            temp.x += self.srcrect.r.x
+            temp.y += self.srcrect.r.y
             self.srcrect = pgRect_New(&temp)
 
-        self.origin[0] = self.srcrect.w / 2
-        self.origin[1] = self.srcrect.h / 2
+        self.origin[0] = self.srcrect.r.w / 2
+        self.origin[1] = self.srcrect.r.h / 2
 
     def get_rect(self):
         return pgRect_New(&self.srcrect.r)
+
+
+
+    cpdef Image copy(self):
+        cdef Image new_img = Image.__new__(Image)
+        
+        new_img.angle = self.angle
+        new_img.origin[0] = self.origin[0]
+        new_img.origin[1] = self.origin[1]
+        new_img.flipX = self.flipX
+        new_img.flipY = self.flipY
+
+
+
+        new_img.color = pgColor_New(self.color.data)
+        new_img.alpha = self.alpha
+
+        new_img.texture = self.texture
+        new_img.srcrect = pgRect_New(&self.srcrect.r)
+
+
+        return new_img
+
+
 
     cpdef void draw(self, srcrect=None, dstrect=None):
         """ Copy a portion of the image to the rendering target.
@@ -937,13 +1014,24 @@ cdef class Renderer:
         """
         # https://wiki.libsdl.org/SDL_CreateRenderer
         # https://wiki.libsdl.org/SDL_RendererFlags
-        flags = 0
+        
+        cdef SDL_bool hint_set
+
+        cdef int flags = 0
         if accelerated >= 0:
             flags |= _SDL_RENDERER_ACCELERATED if accelerated else _SDL_RENDERER_SOFTWARE
         if vsync:
             flags |= _SDL_RENDERER_PRESENTVSYNC
         if target_texture:
             flags |= _SDL_RENDERER_TARGETTEXTURE
+
+
+        hint_set = SDL_SetHint( "SDL_RENDER_BATCHING", "1" )
+
+        if hint_set:
+            print "SDL2 Render Batching hint set successfully."
+        else:
+            print "SDL2 Render Batching hint not set."
 
         self._renderer = SDL_CreateRenderer(window._win, index, flags)
         if not self._renderer:
@@ -981,7 +1069,7 @@ cdef class Renderer:
         if res < 0:
             raise error()
 
-    def clear(self):
+    cpdef clear(self):
         """ Clear the current rendering target with the drawing color.
         """
         # https://wiki.libsdl.org/SDL_RenderClear
@@ -989,7 +1077,7 @@ cdef class Renderer:
         if res < 0:
             raise error()
 
-    def present(self):
+    cpdef present(self):
         """ Present the composed backbuffer to the screen.
 
         Updates the screen with any rendering performed since previous call.
